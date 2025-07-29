@@ -12,5 +12,10 @@ import java.util.UUID;
 public interface FavoriteListRepository extends JpaRepository<FavoriteList, UUID> {
     List<FavoriteList> findByOwnerId(Long ownerId);
     Optional<FavoriteList> findByCapabilityToken(String token);
+
+    List<FavoriteList> findByVisibility(String visibility);
+
+    // Assuming sharedWith is a collection of Long userIds
+    List<FavoriteList> findBySharedWithContains(Long userId);
 }
 

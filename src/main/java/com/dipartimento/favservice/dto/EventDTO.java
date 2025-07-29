@@ -23,6 +23,17 @@ public class EventDTO {
     private EventStatus status;
     private Long organizerId;
 
+    private Long id; // <== aggiungi questo campo
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+
 
 
     // Getters and Setters

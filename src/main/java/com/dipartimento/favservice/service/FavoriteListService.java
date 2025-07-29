@@ -6,14 +6,22 @@ import com.dipartimento.favservice.dto.EventDTO;
 import com.dipartimento.favservice.dto.EventResponseDTO;
 import com.dipartimento.favservice.dto.FavoriteListRequest;
 import com.dipartimento.favservice.repository.FavoriteListRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
+
+
 
 @Service
 public class FavoriteListService {
@@ -21,6 +29,7 @@ public class FavoriteListService {
     private final FavoriteListRepository repository;
     private final WebClient userClient;
     private final EventClient eventClient; // 👈 Usa la classe custom EventClient
+    private static final Logger log = LoggerFactory.getLogger(FavoriteListService.class);
 
     @Autowired
     public FavoriteListService(FavoriteListRepository repository,
@@ -95,12 +104,21 @@ public class FavoriteListService {
     public EventResponseDTO addEvent(UUID listId, Long userId, Long eventId) {
         FavoriteList list = getListByIdAndUser(listId, userId);
 
+        // Controllo che l'evento esista
+        EventResponseDTO event;
+        try {
+            event = eventClient.getEventById(eventId);
+        } catch (WebClientResponseException.NotFound e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Evento non trovato con ID: " + eventId);
+        }
+
+        // Se esiste, aggiungo e salvo
         list.getEventIds().add(eventId);
         repository.save(list);
 
-        // Ritorna EventResponseDTO, non EventDTO
-        return eventClient.getEventById(eventId);
+        return event;
     }
+
 
 
     public void removeEvent(UUID listId, Long userId, Long eventId) {
@@ -116,22 +134,34 @@ public class FavoriteListService {
         repository.delete(list);
     }
 
+
     public void updateSharedWith(UUID listId, Long ownerId, List<Long> sharedWith) {
-        FavoriteList list = repository.findById(listId).orElseThrow();
+        FavoriteList list = repository.findById(listId)
+                .orElseThrow(() -> new RuntimeException("FavoriteList not found"));
 
         if (!list.getOwnerId().equals(ownerId)) {
             throw new RuntimeException("Unauthorized");
         }
 
         for (Long userId : sharedWith) {
-            Boolean exists = userClient.get()
-                    .uri("/api/users/{id}/exists", userId)
-                    .retrieve()
-                    .bodyToMono(Boolean.class)
-                    .block();
+            try {
 
-            if (exists == null || !exists) {
-                throw new RuntimeException("UserId " + userId + " does not exist");
+                log.info("Verifica esistenza per userId={}", userId);
+
+                Boolean exists = userClient.get()
+                        .uri("/api/users/{id}/exists", userId)
+                        .retrieve()
+                        .bodyToMono(Boolean.class)
+                        .block();
+
+                log.info("Risultato per userId {}: {}", userId, exists);
+
+
+                if (exists == null || !exists) {
+                    throw new RuntimeException("UserId " + userId + " does not exist");
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Error checking user existence for userId " + userId + ": " + e.getMessage());
             }
         }
 
@@ -139,14 +169,20 @@ public class FavoriteListService {
         repository.save(list);
     }
 
-    public List<FavoriteList> getSharedWithMe(Long userId) {
-        return repository.findAll().stream()
-                .filter(list -> list.getVisibility() == FavoriteList.Visibility.SHARED
-                        && list.getSharedWith().contains(userId))
-                .toList();
-    }
+
 
     public List<EventResponseDTO> getEventsByIdsWithAuth(List<Long> eventIds, String authHeader) {
         return eventClient.getEventsByIds(eventIds, authHeader);
     }
+
+
+    public List<FavoriteList> getAllPublicLists() {
+        return repository.findByVisibility("PUBLIC");
+    }
+
+    public List<FavoriteList> getSharedWithMe(Long userId) {
+        return repository.findBySharedWithContains(userId);
+    }
+
+
 }
