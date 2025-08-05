@@ -19,6 +19,8 @@ public class FavoriteList {
 
     private String name;
 
+    private Long sharedByUserId;
+
     @Enumerated(EnumType.STRING)
     private Visibility visibility;
 
@@ -43,6 +45,14 @@ public class FavoriteList {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public Long getSharedByUserId() {
+        return sharedByUserId;
+    }
+
+    public void setSharedByUserId(Long sharedByUserId) {
+        this.sharedByUserId = sharedByUserId;
     }
 
     public Long getOwnerId() {

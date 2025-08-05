@@ -25,20 +25,27 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
+
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**").permitAll()  // login/logout pubblici
-                        .requestMatchers("/api/favorites/public/**").permitAll()  // endpoint pubblici se ne hai
-                        .anyRequest().authenticated()   // tutti gli altri richiedono autenticazione
+                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/api/favorites/public/**").permitAll()
+                        .requestMatchers("/api/favorites/test").permitAll()  // <--- aggiunto
+                        .anyRequest().authenticated()
                 )
+
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:4200"));
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:4200",
+                "http://192.168.0.107:4200"    // aggiungi qui il tuo IP di rete
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
@@ -47,4 +54,5 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
+
 }

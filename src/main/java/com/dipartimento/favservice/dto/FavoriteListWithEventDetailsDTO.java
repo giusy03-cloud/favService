@@ -9,6 +9,15 @@ import java.util.List;
 public class FavoriteListWithEventDetailsDTO {
     private FavoriteList favoriteList;
     private List<EventDTO> events;
+    private String ownerUsername;
+
+    public String getOwnerUsername() {
+        return ownerUsername;
+    }
+
+    public void setOwnerUsername(String ownerUsername) {
+        this.ownerUsername = ownerUsername;
+    }
 
     // Getters & Setters
     public FavoriteList getFavoriteList() {

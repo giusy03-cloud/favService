@@ -5,12 +5,14 @@ import com.dipartimento.favservice.domain.FavoriteList;
 import com.dipartimento.favservice.dto.EventDTO;
 import com.dipartimento.favservice.dto.EventResponseDTO;
 import com.dipartimento.favservice.dto.FavoriteListRequest;
+import com.dipartimento.favservice.dto.UsersAccountsDTO;
 import com.dipartimento.favservice.repository.FavoriteListRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -20,7 +22,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-
+import reactor.core.publisher.Mono;
+import com.dipartimento.favservice.dto.FavoriteListWithOwnerDTO;
 
 
 @Service
@@ -84,11 +87,21 @@ public class FavoriteListService {
                 });
     }
 
+
+
     public Optional<FavoriteList> getPublicByToken(String token) {
-        Optional<FavoriteList> listOpt = repository.findByCapabilityToken(token);
-        listOpt.ifPresent(list -> System.out.println("Event IDs: " + list.getEventIds()));
+        Optional<FavoriteList> listOpt = repository.findByCapabilityToken(token)
+                .filter(list -> list.getVisibility() == FavoriteList.Visibility.PUBLIC);
+
+        listOpt.ifPresentOrElse(
+                list -> log.info("Lista pubblica trovata per token {}", token),
+                () -> log.warn("Lista trovata per token {} ma non è pubblica", token)
+        );
+
         return listOpt;
     }
+
+
 
     public FavoriteList getListByIdAndUser(UUID listId, Long userId) {
         FavoriteList list = repository.findById(listId)
@@ -166,6 +179,7 @@ public class FavoriteListService {
         }
 
         list.setSharedWith(sharedWith);
+        list.setSharedByUserId(ownerId);
         repository.save(list);
     }
 
@@ -183,6 +197,128 @@ public class FavoriteListService {
     public List<FavoriteList> getSharedWithMe(Long userId) {
         return repository.findBySharedWithContains(userId);
     }
+
+
+    // il metodo che hai già scritto
+    public void createDefaultListsForUser(Long userId) {
+        List<FavoriteList> defaultLists = List.of(
+                buildList("Preferiti Privati", FavoriteList.Visibility.PRIVATE, userId),
+                buildList("Preferiti Condivisi", FavoriteList.Visibility.SHARED, userId),
+                buildList("Preferiti Pubblici", FavoriteList.Visibility.PUBLIC, userId)
+        );
+
+        repository.saveAll(defaultLists);
+    }
+
+    private FavoriteList buildList(String name, FavoriteList.Visibility visibility, Long ownerId) {
+        FavoriteList list = new FavoriteList();
+        list.setName(name);
+        list.setVisibility(visibility);
+        list.setOwnerId(ownerId);
+        list.setCapabilityToken(UUID.randomUUID().toString()); // utile se vuoi link pubblici
+        return list;
+    }
+
+
+
+    public String getUserNameById(Long userId) {
+        try {
+
+            String userName = userClient.get()
+                    .uri("/api/users/{id}/name", userId)
+                    .accept(MediaType.TEXT_PLAIN)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+            log.info("Risposta userName: '{}'", userName);
+
+
+
+            if (userName == null || userName.isEmpty()) {
+                log.warn("Nome utente non trovato per id: {}", userId);
+                return "Unknown";
+            }
+
+            log.info("Nome utente recuperato per id {}: {}", userId, userName);
+            return userName;
+
+        } catch (Exception e) {
+            log.error("Errore recupero nome utente per id: {}", userId, e);
+            return "Unknown";
+        }
+    }
+
+
+
+
+    public FavoriteListWithOwnerDTO getFavoriteListWithOwnerAndSharedBy(UUID listId) {
+        FavoriteList list = repository.findById(listId)
+                .orElseThrow(() -> new RuntimeException("FavoriteList not found"));
+
+        FavoriteListWithOwnerDTO dto = new FavoriteListWithOwnerDTO();
+        dto.setFavoriteList(list);
+
+        UsersAccountsDTO owner = new UsersAccountsDTO();
+        owner.setName(getUserNameById(list.getOwnerId()));
+        dto.setOwner(owner);
+
+        if (list.getSharedByUserId() != null) {
+            UsersAccountsDTO sharedBy = new UsersAccountsDTO();
+            sharedBy.setName(getUserNameById(list.getSharedByUserId()));
+            dto.setSharedBy(sharedBy);
+        }
+
+        return dto;
+    }
+
+
+
+
+
+    private UsersAccountsDTO getUserAccountDTO(Long userId) {
+        log.info("Chiamata getUserAccountDTO per userId={}", userId);
+        try {
+            String userName = userClient.get()
+                    .uri("/api/users/{id}/name", userId)
+                    .accept(MediaType.TEXT_PLAIN)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            log.info("Nome ricevuto per user {}: {}", userId, userName);
+
+            if (userName == null || userName.isEmpty()) {
+                log.warn("Utente non trovato per id: {}", userId);
+                return createUnknownUserDTO();
+            }
+
+            UsersAccountsDTO dto = new UsersAccountsDTO();
+            dto.setId(userId);
+            dto.setName(userName);
+            return dto;
+
+        } catch (Exception e) {
+            log.error("Errore recuperando nome utente per id: {}", userId, e);
+            return createUnknownUserDTO();
+        }
+    }
+
+    private UsersAccountsDTO createUnknownUserDTO() {
+        UsersAccountsDTO dto = new UsersAccountsDTO();
+        dto.setId(null);
+        dto.setName("Unknown");
+        return dto;
+    }
+
+
+
+
+
+
+
+
+
+
 
 
 }

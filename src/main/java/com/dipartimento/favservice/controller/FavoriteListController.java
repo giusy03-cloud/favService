@@ -1,10 +1,7 @@
 package com.dipartimento.favservice.controller;
 
 import com.dipartimento.favservice.domain.FavoriteList;
-import com.dipartimento.favservice.dto.EventDTO;
-import com.dipartimento.favservice.dto.EventResponseDTO;
-import com.dipartimento.favservice.dto.FavoriteListRequest;
-import com.dipartimento.favservice.dto.FavoriteListWithEventDetailsDTO;
+import com.dipartimento.favservice.dto.*;
 import com.dipartimento.favservice.service.FavoriteListService;
 import com.dipartimento.favservice.util.JwtUtil;
 import org.slf4j.Logger;
@@ -13,6 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
+import com.dipartimento.favservice.service.FavoriteListService;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -57,8 +56,18 @@ public class FavoriteListController {
     @GetMapping("/lists")
     public ResponseEntity<?> getMyLists(@RequestHeader("Authorization") String authHeader) {
         Long userId = jwtUtil.extractUserId(authHeader);
-        return ResponseEntity.ok(service.getMyLists(userId));
+
+        List<FavoriteList> existingLists = service.getMyLists(userId);
+
+        // SE NON HA LISTE, CREA LE 3 DI DEFAULT
+        if (existingLists.isEmpty()) {
+            service.createDefaultListsForUser(userId);
+            existingLists = service.getMyLists(userId);
+        }
+
+        return ResponseEntity.ok(existingLists);
     }
+
 
     @GetMapping("/lists/{id}")
     public ResponseEntity<?> getList(@RequestHeader("Authorization") String authHeader, @PathVariable UUID id) {
@@ -278,6 +287,7 @@ public class FavoriteListController {
 
 
 
+
     @GetMapping("/lists/shared-with-me/with-events")
     public ResponseEntity<?> getSharedWithMeWithEvents(@RequestHeader("Authorization") String authHeader) {
         System.out.println("Entrato in getSharedWithMeWithEvents");
@@ -296,7 +306,6 @@ public class FavoriteListController {
             FavoriteListWithEventDetailsDTO dto = new FavoriteListWithEventDetailsDTO();
             dto.setFavoriteList(list);
 
-            // Assumendo che tu abbia fatto la conversione da EventResponseDTO a EventDTO
             List<EventDTO> eventDTOs = events.stream().map(resp -> {
                 EventDTO dtoEvent = new EventDTO();
                 dtoEvent.setId(resp.getId());
@@ -313,11 +322,70 @@ public class FavoriteListController {
             }).collect(Collectors.toList());
 
             dto.setEvents(eventDTOs);
+
+            // Aggiungi qui la chiamata per settare ownerUsername
+            String ownerUsername = service.getUserNameById(list.getOwnerId());
+            dto.setOwnerUsername(ownerUsername);
+
             return dto;
         }).collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
     }
+
+
+
+    @GetMapping("/lists/{id}/owner-name")
+    public ResponseEntity<String> getListOwnerName(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable UUID id) {
+
+        try {
+            Long userId = jwtUtil.extractUserId(authHeader); // Verifica che l'utente sia autenticato
+            Optional<FavoriteList> listOpt = service.getById(id, userId);
+
+            if (listOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Lista non trovata o non accessibile");
+            }
+
+            FavoriteList list = listOpt.get();
+            Long ownerId = list.getOwnerId();  // 👈 prendi l’owner
+
+            String ownerName = service.getUserNameById(ownerId); // 👈 chiama l'altro servizio passando l'id
+            return ResponseEntity.ok(ownerName);
+
+        } catch (Exception e) {
+            log.error("Errore nel recupero del nome del proprietario della lista {}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Errore nel recupero del nome del proprietario");
+        }
+    }
+
+    @GetMapping("/lists/{id}/with-owner")
+    public ResponseEntity<?> getListWithOwner(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable UUID id) {
+
+        log.info("Chiamato endpoint /lists/{}/with-owner", id);
+
+        try {
+            FavoriteListWithOwnerDTO dto = service.getFavoriteListWithOwnerAndSharedBy(id);
+            log.info("DTO recuperato: {}", dto);
+            return ResponseEntity.ok(dto);
+        } catch (RuntimeException e) {
+            log.error("Errore nel recupero lista con owner: ", e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        }
+    }
+
+
+
+
+
+
+
+
+
 
 
 
