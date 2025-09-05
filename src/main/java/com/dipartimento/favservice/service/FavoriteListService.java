@@ -200,15 +200,56 @@ public class FavoriteListService {
 
 
     // il metodo che hai già scritto
+
+
+
     public void createDefaultListsForUser(Long userId) {
+        // Controlla se l’utente ha già delle liste
+        List<FavoriteList> existing = repository.findByOwnerId(userId);
+        if (!existing.isEmpty()) return;
+
+        // Recupera il nome dell'utente tramite il metodo esistente
+;
+
+        // Crea liste di default con il nome dell’utente
         List<FavoriteList> defaultLists = List.of(
-                buildList("Preferiti Privati", FavoriteList.Visibility.PRIVATE, userId),
+                buildList("Preferiti Privati " ,FavoriteList.Visibility.PRIVATE, userId),
                 buildList("Preferiti Condivisi", FavoriteList.Visibility.SHARED, userId),
                 buildList("Preferiti Pubblici", FavoriteList.Visibility.PUBLIC, userId)
         );
 
         repository.saveAll(defaultLists);
     }
+
+
+    public List<FavoriteListWithOwnerDTO> getMyListsWithOwner(Long userId) {
+        // Recupera tutte le liste dell'utente
+        List<FavoriteList> lists = repository.findByOwnerId(userId);
+
+        // Mappa ogni lista in un DTO con nome reale
+        return lists.stream().map(list -> {
+            FavoriteListWithOwnerDTO dto = new FavoriteListWithOwnerDTO();
+            dto.setFavoriteList(list);
+
+            // Imposta owner
+            UsersAccountsDTO owner = new UsersAccountsDTO();
+            owner.setId(list.getOwnerId());
+            owner.setName(getUserNameById(list.getOwnerId()));  // qui prende il nome reale
+            dto.setOwner(owner);
+
+            // Imposta sharedBy se esiste
+            if (list.getSharedByUserId() != null) {
+                UsersAccountsDTO sharedBy = new UsersAccountsDTO();
+                sharedBy.setId(list.getSharedByUserId());
+                sharedBy.setName(getUserNameById(list.getSharedByUserId()));
+                dto.setSharedBy(sharedBy);
+            }
+
+            return dto;
+        }).toList();
+    }
+
+
 
     private FavoriteList buildList(String name, FavoriteList.Visibility visibility, Long ownerId) {
         FavoriteList list = new FavoriteList();
@@ -221,33 +262,40 @@ public class FavoriteListService {
 
 
 
+
+
+
     public String getUserNameById(Long userId) {
         try {
+            log.info("Calling UserService for id {}", userId);
 
-            String userName = userClient.get()
-                    .uri("/api/users/{id}/name", userId)
-                    .accept(MediaType.TEXT_PLAIN)
-                    .retrieve()
-                    .bodyToMono(String.class)
+            // Chiamata al microservizio utenti
+
+
+            String response = userClient.get()
+                    .uri("/api/users/{id}/username", userId)
+                    .exchangeToMono(clientResponse -> {
+                        log.info("Status code: {}", clientResponse.statusCode());
+                        return clientResponse.bodyToMono(String.class);
+                    })
                     .block();
-            log.info("Risposta userName: '{}'", userName);
 
 
+            log.info("Response from UserService: '{}'", response);
 
-            if (userName == null || userName.isEmpty()) {
+            // Controllo se la risposta è nulla o vuota
+            if (response == null || response.isEmpty()) {
                 log.warn("Nome utente non trovato per id: {}", userId);
                 return "Unknown";
             }
 
-            log.info("Nome utente recuperato per id {}: {}", userId, userName);
-            return userName;
+            return response;
 
         } catch (Exception e) {
             log.error("Errore recupero nome utente per id: {}", userId, e);
             return "Unknown";
         }
     }
-
 
 
 

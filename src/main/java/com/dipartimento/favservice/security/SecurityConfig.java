@@ -1,8 +1,5 @@
 package com.dipartimento.favservice.security;
 
-
-
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,34 +14,38 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
-    @Autowired
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable())
-
+                .csrf(csrf -> csrf.disable()) // disabilita CSRF per test / API pubbliche
                 .authorizeHttpRequests(auth -> auth
+                        // endpoint pubblici senza autenticazione
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/api/favorites/public/**").permitAll()
-                        .requestMatchers("/api/favorites/test").permitAll()  // <--- aggiunto
+                        .requestMatchers("/public/**").permitAll()
+                        // tutte le altre richieste richiedono autenticazione
                         .anyRequest().authenticated()
                 )
-
+                // filtro JWT solo per le richieste che necessitano autenticazione
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(
-                "http://localhost:4200",
-                "http://192.168.0.107:4200"    // aggiungi qui il tuo IP di rete
+                "http://localhost:4200",       // Angular in locale
+                "http://192.168.0.107:4200",  // Angular in rete locale
+                "http://192.168.0.107"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
@@ -54,5 +55,4 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
-
 }

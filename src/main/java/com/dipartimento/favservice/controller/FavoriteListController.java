@@ -378,6 +378,12 @@ public class FavoriteListController {
         }
     }
 
+    @GetMapping("/my/{userId}")
+    public ResponseEntity<List<FavoriteListWithOwnerDTO>> getMyLists(@PathVariable Long userId) {
+        List<FavoriteListWithOwnerDTO> lists = service.getMyListsWithOwner(userId);
+        return ResponseEntity.ok(lists);
+    }
+
 
 
 
