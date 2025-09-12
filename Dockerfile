@@ -1,14 +1,22 @@
-# Usa un'immagine base di OpenJDK
-FROM openjdk:17-jdk-alpine
+# Usa OpenJDK 17 come base
+FROM openjdk:17
 
-# Variabile di ambiente per il nome dell'app
-ENV APP_NAME=favService
 
-# Copia il jar compilato nel container
+# Copia il jar dell'applicazione
 COPY target/favService-0.0.1-SNAPSHOT.jar app.jar
 
-# Espone la porta del server Spring Boot
-EXPOSE 8084
 
-# Comando per avviare l'app
-ENTRYPOINT ["java","-jar","/app.jar"]
+
+# Copia lo script wait-for-it (opzionale se vuoi aspettare il DB)
+COPY wait-for-it.sh /wait-for-it.sh
+RUN chmod +x /wait-for-it.sh
+
+
+# Espone la porta 8081
+EXPOSE 8081
+
+
+# Avvia l'app
+# ATTENZIONE: 'host.docker.internal' punta al DB sul tuo PC
+ENTRYPOINT ["./wait-for-it.sh", "host.docker.internal:5432", "--timeout=30", "--strict", "--", "java", "-jar", "app.jar"]
+
